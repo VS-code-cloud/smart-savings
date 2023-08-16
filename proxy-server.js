@@ -12,7 +12,8 @@ app.get('/proxy', async (req, res) => {
   if (!url) {
     return res.status(400).json({ error: 'URL parameter is required' });
   }
-
+  res.setHeader('Content-Type', 'text/html');
+  res.setHeader('Cache-Control', 's-max-age=1, stale-while-revalidate');
   try {
     /*const response = await fetch(url);
     const content = await response.text();
