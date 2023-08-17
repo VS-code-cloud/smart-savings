@@ -1,19 +1,23 @@
 const express = require('express');
-import('node-fetch');
-const jsdom = require("jsdom");
+const axios = require("axios");
+const cheerio = require("cheerio");
 const app = express();
 const PORT = 3000; // Port on which your proxy server will run
-var juice = require('juice');
+var cors = require('cors')
+
+/*var corsOptions = {
+  origin: 'https://www.amazon.com',
+  referer: 'https://www.google.com/',
+  User-Agent:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+}*/
 
 // Endpoint to handle proxy requests
-app.get('/proxy', async (req, res) => {
+app.get('/proxy', cors(/*corsOptions*/), async (req, res) => {
   const url = req.query.url; // Get the URL to proxy from the query parameter
   console.log('url', url)
   if (!url) {
     return res.status(400).json({ error: 'URL parameter is required' });
   }
-  res.setHeader('Content-Type', 'text/html');
-  res.setHeader('Cache-Control', 's-max-age=1, stale-while-revalidate');
   try {
     /*const response = await fetch(url);
     const content = await response.text();
@@ -25,24 +29,45 @@ app.get('/proxy', async (req, res) => {
     for (let i=0; i<results.length; i++) {
       final+=results[i].outerHTML
     }*/
-    const response = await fetch(url)
-    const content = await response.text()
-    //const dom = new jsdom.JSDOM(content);
-    var domString = juice(content);
-    console.log('type of domstring', typeof domString)
-    const dom = new jsdom.JSDOM(domString)
+    console.log('w')
+    const response = await axios.get(url, { headers: { 'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/115.0.1901.203" } })
+    const html = response.data;
 
-    let results = dom.window.document.getElementsByClassName('s-result-item s-asin');
-    var stringRes;
-    for (let i=0; i<results.length; i++) {
-      stringRes+=results[i].outerHTML
-    }
-    res.send(dom.window.document.head.outerHTML+dom.window.document.body.outerHTML+results[0].outerHTML);
+       const $ = cheerio.load(html);
+
+       const items = [];
+
+       $('div.sg-col-4-of-12.s-result-item.s-asin.sg-col-4-of-16.sg-col.sg-col-4-of-20').each((_idx, el) => {
+           const item = $(el)
+           const title = item.find('span.a-size-base-plus.a-color-base.a-text-normal').text()
+           const image = item.find('img.s-image').attr('src')
+           const link = item.find('a.a-link-normal.a-text-normal').attr('href')
+           const reviews = item.find('div.a-section.a-spacing-none.a-spacing-top-micro > div.a-row.a-size-small').children('span').last().attr('aria-label')
+           const stars = item.find('div.a-section.a-spacing-none.a-spacing-top-micro > div > span').attr('aria-label')
+           const price = item.find('span.a-price > span.a-offscreen').text()
+            let element = {
+                title,
+                image,
+                link: `https://amazon.com${link}`,
+                price: price.split('$')[1],
+            }
+            if (reviews) {
+                element.reviews = reviews
+            }
+        
+            if (stars) {
+                element.stars = stars
+            }
+           items.push(element)
+       });
+
+    res.send(items);
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred while fetching the content' });
+    console.log('error', error)
+    res.status(500).json({ error: 'An error occurred while fetching the content: ' + error });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Proxy server is running on port ${PORT}`);
+  console.log(`Proxy server is running rn on port ${PORT}`);
 });
